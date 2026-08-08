@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -38,6 +38,26 @@ class Settings(BaseSettings):
     webhook_secret: str = ""
 
     log_level: str = "INFO"
+
+    @field_validator("database_url")
+    @classmethod
+    def _normalise_driver(cls, url: str) -> str:
+        """Accept the connection string hosted Postgres actually hands out.
+
+        Neon, Render, Supabase and Heroku all give you ``postgresql://…`` (or
+        the long-deprecated ``postgres://``). SQLAlchemy needs the driver named
+        explicitly, and without it silently reaches for psycopg2 -- which is
+        not installed -- so the service dies at import with a ModuleNotFound
+        that says nothing about the real cause.
+
+        Rewriting it here means the URL can be pasted from the provider's
+        dashboard unedited, which is the one step in a deploy most likely to be
+        got wrong at 1am.
+        """
+        for prefix in ("postgresql://", "postgres://"):
+            if url.startswith(prefix):
+                return "postgresql+psycopg://" + url[len(prefix) :]
+        return url
 
 
 @lru_cache
