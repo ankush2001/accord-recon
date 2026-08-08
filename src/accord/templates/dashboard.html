@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>accord — break queue</title>
+  <style>
+    /* Light palette on :root, dark redefined under prefers-color-scheme, so
+       the page follows the operator's own setting rather than insisting. */
+    :root {
+      --bg: #fbfbfa; --panel: #ffffff; --ink: #1a1a1a; --muted: #6b6b6b;
+      --line: #e4e4e1; --accent: #1f5f4f;
+      --danger: #a4292a; --warn: #8a6300; --ok: #1f5f4f; --info: #2d4f7c;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #16161a; --panel: #1e1e23; --ink: #ececec; --muted: #9a9a9a;
+        --line: #2e2e35; --accent: #6fcfae;
+        --danger: #f08a8a; --warn: #e0b45c; --ok: #6fcfae; --info: #85b0e8;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink);
+      font: 15px/1.55 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+    header { margin-bottom: 2rem; }
+    h1 { font-size: 1.5rem; margin: 0 0 .25rem; letter-spacing: -.01em; }
+    .sub { color: var(--muted); font-size: .9rem; }
+    h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em;
+         color: var(--muted); margin: 2.5rem 0 .75rem; font-weight: 600; }
+
+    .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .75rem; }
+    .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 1rem; }
+    .tile .label { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+    .tile .value { font-size: 1.6rem; font-weight: 650; margin-top: .3rem;
+                   font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+    .tile .note { font-size: .78rem; color: var(--muted); margin-top: .15rem; }
+
+    /* Wide tables scroll inside their own box; the page never scrolls sideways. */
+    .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+    table { border-collapse: collapse; width: 100%; font-size: .875rem; }
+    th, td { text-align: left; padding: .6rem .8rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
+    tr:last-child td { border-bottom: none; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .detail { color: var(--muted); max-width: 46ch; }
+
+    .badge { display: inline-block; padding: .12rem .45rem; border-radius: 5px;
+             font-size: .7rem; font-weight: 650; letter-spacing: .02em; white-space: nowrap;
+             border: 1px solid currentColor; }
+    .MISSING_IN_STATEMENT { color: var(--danger); }
+    .MISSING_IN_LEDGER    { color: var(--warn); }
+    .AMOUNT_MISMATCH      { color: var(--danger); }
+    .DUPLICATE            { color: var(--warn); }
+    .TIMING_DIFFERENCE    { color: var(--info); }
+    .status { font-size: .72rem; color: var(--muted); }
+    .aged { color: var(--danger); font-weight: 650; }
+
+    .empty { padding: 2.5rem 1rem; text-align: center; color: var(--muted); }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85em; }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>accord</h1>
+    <div class="sub">Reconciliation and break detection ·
+      <a href="/docs">API</a> · <a href="/health">health</a></div>
+  </header>
+
+  {% if run %}
+  <div class="tiles">
+    <div class="tile">
+      <div class="label">Match rate</div>
+      <div class="value">{{ '%.1f'|format(run.match_rate * 100) }}%</div>
+      <div class="note">{{ run.matched_count }} matches</div>
+    </div>
+    <div class="tile">
+      <div class="label">Unexplained</div>
+      <div class="value">{{ run.unexplained_minor | money }}</div>
+      <div class="note">net, excluding timing</div>
+    </div>
+    <div class="tile">
+      <div class="label">Open breaks</div>
+      <div class="value">{{ breaks | length }}</div>
+      <div class="note">{{ open_total | money }} gross</div>
+    </div>
+    <div class="tile">
+      <div class="label">Rows compared</div>
+      <div class="value">{{ run.ledger_count + run.statement_count }}</div>
+      <div class="note">{{ run.ledger_count }} ledger · {{ run.statement_count }} statement</div>
+    </div>
+    <div class="tile">
+      <div class="label">Last run</div>
+      <div class="value">{{ run.duration_ms }}<span style="font-size:.9rem">ms</span></div>
+      <div class="note">{{ run.period_start }} → {{ run.period_end }}</div>
+    </div>
+  </div>
+
+  {% if by_type %}
+  <h2>Breaks by kind</h2>
+  <div class="tiles">
+    {% for kind, count in by_type.items() %}
+    <div class="tile">
+      <div class="label"><span class="badge {{ kind }}">{{ kind.replace('_', ' ') }}</span></div>
+      <div class="value">{{ count }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% endif %}
+
+  <h2>Break queue — largest first</h2>
+  <div class="scroll">
+    {% if breaks %}
+    <table>
+      <thead>
+        <tr>
+          <th>Kind</th>
+          <th class="num">Amount</th>
+          <th>What happened</th>
+          <th>Status</th>
+          <th class="num">Seen</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for b in breaks %}
+        <tr>
+          <td><span class="badge {{ b.type }}">{{ b.type.replace('_', ' ') }}</span></td>
+          <td class="num">{{ b.amount_minor | money(b.currency) }}</td>
+          <td class="detail">{{ b.detail }}</td>
+          <td class="status">
+            {{ b.status }}{% if b.assignee %} · {{ b.assignee }}{% endif %}
+          </td>
+          <td class="num {% if b.recurrence > 3 %}aged{% endif %}">
+            {{ b.recurrence }}×
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+      <div class="empty">
+        Nothing outstanding.<br>
+        <span style="font-size:.85rem">
+          Import a statement and start a run — see <a href="/docs">the API docs</a>.
+        </span>
+      </div>
+    {% endif %}
+  </div>
+
+  {% if recent %}
+  <h2>Recent runs</h2>
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Started</th>
+          <th>Period</th>
+          <th class="num">Ledger</th>
+          <th class="num">Statement</th>
+          <th class="num">Matched</th>
+          <th class="num">Breaks</th>
+          <th class="num">Rate</th>
+          <th>Inputs</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in recent %}
+        <tr>
+          <td>{{ r.started_at.strftime('%d %b %H:%M') }}</td>
+          <td>{{ r.period_start }} → {{ r.period_end }}</td>
+          <td class="num">{{ r.ledger_count }}</td>
+          <td class="num">{{ r.statement_count }}</td>
+          <td class="num">{{ r.matched_count }}</td>
+          <td class="num">{{ r.break_count }}</td>
+          <td class="num">{{ '%.1f'|format(r.match_rate * 100) }}%</td>
+          <!-- The input fingerprint: two runs sharing it must have produced
+               identical output, which is what makes a run reproducible. -->
+          <td><code>{{ r.input_hash[:10] }}</code></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+</div>
+</body>
+</html>

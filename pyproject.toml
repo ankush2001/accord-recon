@@ -1,0 +1,84 @@
+[project]
+name = "accord-recon"
+version = "1.0.0"
+description = "Reconciliation and break-detection engine for payment ledgers"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Ankush Choudhary" }]
+
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "sqlalchemy>=2.0.36",
+    "alembic>=1.14",
+    "psycopg[binary]>=3.2",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.12",
+    "httpx>=0.27",
+]
+
+# Deliberately absent: pandas, numpy, scipy.
+#
+# The obvious reach for a matching engine is pandas for the dataframes and
+# scipy for an optimal assignment. Neither earns its place here. Reconciliation
+# runs over thousands of rows, not millions, and the conflict groups the
+# matcher has to resolve are almost always two or three candidates -- a size
+# where an exact search in plain Python finishes instantly. Adding ~90MB of
+# numeric stack to a service that fits in a free tier's memory would be paying
+# a real cost for a theoretical one.
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "hypothesis>=6.115",
+    "ruff>=0.7",
+    "mypy>=1.13",
+    "testcontainers[postgres]>=4.8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/accord"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q --strict-markers"
+markers = [
+    "integration: needs a real Postgres (Testcontainers)",
+]
+
+[tool.ruff]
+line-length = 100
+# Alembic writes these; reformatting generated files just creates diff noise.
+extend-exclude = ["alembic/versions"]
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# B008 forbids calling a function in an argument default. That is exactly how
+# FastAPI declares dependencies and file uploads -- Depends(...) and File(...)
+# in the signature is the framework's documented idiom, not an accident. Scoped
+# to the HTTP layer so the rule keeps working everywhere it should.
+"src/accord/api/*.py" = ["B008"]
+# Test fixtures are class-level data, deliberately shared and never mutated.
+"tests/*.py" = ["RUF012"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["accord"]
+mypy_path = "src"
+# SQLAlchemy's declarative models are heavily dynamic; its own plugin
+# understands them, and without this every mapped column reads as Any.
+plugins = ["sqlalchemy.ext.mypy.plugin"]
