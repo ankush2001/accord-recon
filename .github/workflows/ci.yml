@@ -67,10 +67,10 @@ jobs:
       # after upgrading, autogenerate must find nothing left to do.
       - name: The migrations match the models
         run: |
-          uv run alembic revision --autogenerate -m "drift check" --rev-id drift-check
-          if grep -qE "op\.(create|drop|add|alter)_" alembic/versions/drift-check_*.py; then
+          uv run alembic revision --autogenerate -m "drift check" --rev-id driftcheck
+          if grep -qE "op\.(create|drop|add|alter)_" alembic/versions/driftcheck_*.py; then
             echo "::error::models and migrations have diverged — run alembic revision --autogenerate"
-            cat alembic/versions/drift-check_*.py
+            cat alembic/versions/driftcheck_*.py
             exit 1
           fi
           echo "no drift"
