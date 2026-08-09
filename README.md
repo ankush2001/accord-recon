@@ -2,6 +2,10 @@
 
 Reconciliation and break detection for payment ledgers, in Python and FastAPI.
 
+**Live:** <https://accord-recon.onrender.com> — the break queue, with real data from the ledger next door · [API docs](https://accord-recon.onrender.com/docs)
+
+> Free instance, sleeps after 15 minutes idle. Python wakes in a few seconds.
+
 Two systems both claim to know what happened to your money: your ledger, and
 your bank. They never quite agree. This service compares them and produces the
 thing a finance team actually needs — not a match rate, but a **classified,
